@@ -12,6 +12,11 @@ use starship::context::{Context, Properties, Target};
 use starship::module::ALL_MODULES;
 use starship::{bug_report, configure, init, logger, num_rayon_threads, print, shadow};
 
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 #[derive(Parser, Debug)]
 #[clap(
     author=crate_authors!(),
