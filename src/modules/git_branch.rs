@@ -1,4 +1,5 @@
 use gix::bstr::ByteSlice;
+use std::borrow::Cow;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{Context, Module, ModuleConfig};
@@ -35,7 +36,7 @@ pub fn module<'a>(context: &'a Context) -> Option<Module<'a>> {
     }
 
     // Get branch and remote information
-    let (branch_name, remote_branch, remote_name) = if uses_reftables(&gix_repo) {
+    let (_branch_name, remote_branch, remote_name) = if uses_reftables(&gix_repo) {
         // Use git executable for branch information
         match get_branch_info_from_git(context, repo) {
             Some((branch, remote_branch)) => {
@@ -89,6 +90,20 @@ pub fn module<'a>(context: &'a Context) -> Option<Module<'a>> {
             (None, None)
         };
         (branch, remote_branch, remote_name)
+    };
+
+    let branch_name = match repo.branch.as_deref() {
+        Some(name) => Cow::Borrowed(name),
+        None => {
+            if context
+                .dir_contents()
+                .is_ok_and(|dir| dir.has_folder(".jj"))
+            {
+                Cow::Owned(get_first_jj_bookmark_name(context)?)
+            } else {
+                Cow::Borrowed("HEAD")
+            }
+        }
     };
 
     if config
@@ -217,6 +232,32 @@ fn get_branch_info_from_git(
     };
 
     Some((branch_name, remote_info))
+}
+
+fn get_first_jj_bookmark_name(context: &Context) -> Option<String> {
+    let bookmark = context
+        .exec_cmd(
+            "jj",
+            &[
+                "log",
+                "--ignore-working-copy",
+                "--color",
+                "never",
+                "--no-graph",
+                "--no-pager",
+                "--revisions",
+                "mutable()-::@",
+                "--template",
+                r#"bookmarks ++ "\n""#,
+            ],
+        )?
+        .stdout
+        .split('\n')
+        .find(|out| !out.is_empty())
+        .unwrap_or("BOOKMARK")
+        .to_string();
+
+    Some(bookmark)
 }
 
 fn get_first_grapheme(text: &str) -> &str {
